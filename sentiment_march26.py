@@ -95,6 +95,8 @@ class SentimentModel(object):
 		#SCOPE ???
 			W1 = tf.get_variable("W1",[self.hidden_size,2*self.hidden_size],initializer=tf.random_uniform_initializer(-1.0,1.0))
 			W2 = tf.get_variable("W2",[self.hidden_size,2*self.hidden_size],initializer=tf.random_uniform_initializer(-1.0,1.0))
+			b1 = tf.get_variable("b1", [self.num_classes], initializer=tf.constant_initializer(0.1))
+			b2 = tf.get_variable("b2", [self.num_classes], initializer=tf.constant_initializer(0.1))
 			pair_rep = tf.zeros([self.pairs.shape[0], self.hidden_size, 1] , tf.float32) 
 			i = 0
 			for pair in self.pairs:
@@ -155,13 +157,13 @@ class SentimentModel(object):
 			self.merged = tf.summary.merge([loss_summ, acc_summ])
 		self.saver = tf.train.Saver(tf.all_variables())
 
-	def getBatchPair(self, test_data=False):
-		if not test_data:
-			batch_pairs = self.train_data[1][self.train_batch_pointer]
-			return batch_pairs
-		else:
-			batch_pairs = self.test_data[1][self.test_batch_pointer]
-			return batch_pairs
+	# def getBatchPair(self, test_data=False):
+	# 	if not test_data:
+	# 		batch_pairs = self.train_data[1][self.train_batch_pointer]
+	# 		return batch_pairs
+	# 	else:
+	# 		batch_pairs = self.test_data[1][self.test_batch_pointer]
+	# 		return batch_pairs
 
 
 	def getBatch(self, test_data=False):
@@ -186,7 +188,7 @@ class SentimentModel(object):
 			targets = self.train_targets[self.train_batch_pointer]
 			seq_lengths = self.train_sequence_lengths[self.train_batch_pointer]
 			self.train_batch_pointer = self.train_batch_pointer % len(self.train_data)
-			pairs = getBatchPair(test_data)
+			pairs = self.train_data[1][self.train_batch_pointer]
 			self.train_batch_pointer += 1
 			return batch_inputs, pairs, targets, seq_lengths
 		else:
@@ -195,7 +197,7 @@ class SentimentModel(object):
 			#	batch_inputs.append(temp[i])
 			targets = self.test_targets[self.test_batch_pointer]
 			seq_lengths = self.test_sequence_lengths[self.test_batch_pointer]
-			pairs = getBatchPair(test_data)
+			pairs = self.test_data[1][self.test_batch_pointer]
 			self.test_batch_pointer += 1
 			self.test_batch_pointer = self.test_batch_pointer % len(self.test_data)
 			return batch_inputs, pairs, targets, seq_lengths
