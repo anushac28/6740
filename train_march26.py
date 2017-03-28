@@ -1,286 +1,297 @@
 '''
-I used mainly the tensorflow translation example:
-https://github.com/tensorflow/tensorflow/
+https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/ops/rnn.py
+FOR LOOPS:
 
-and semi-based this off the sentiment analyzer here:
-http://deeplearning.net/tutorial/lstm.html
-
+    for input_ in input_shape:
+      if input_[1].get_shape() != batch_size.get_shape():
+		raise ValueError("All inputs should have the same batch size")
 
 '''
 import tensorflow as tf
-from tensorflow.python.platform import gfile
+from tensorflow.contrib.rnn.python.ops import core_rnn_cell
+from tensorflow.python.ops import rnn #seq2seq
+from tensorflow.python.ops import array_ops
 import numpy as np
-import sys
-import math
-import os
-import ConfigParser
-import random
-import time
-from six.moves import xrange
-import util.dataprocessor
-import util.hyperparams as hyperparams
-import models.sentiment
-import util.vocabmapping
-import file_ids
-from file_ids import blog_ids, newswire_ids, df_weird_ids
+from tensorflow.python.util import nest
 
-blog_train = ['0a421343005f3241376fa01e1cb3c6fb','0ba982819aaf9f5b94a7cebd48ac6018','0c49bb860962aa0d5b8e3fc277592da0','0cfdfe102b7a4cb34e1a181c1d36d23d']
-blog_test = ['1b268b27094ba9c5feb11192dad940ab','1d16a571f14fb1032bc19e9314a46deb']
+class SentimentModel(object):
+	'''
+	Sentiment Model
+	params:
+	vocab_size: size of vocabulary
+	hidden_size: number of units in a hidden layer
+	num_layers: number of hidden lstm layers
+	max_gradient_norm: maximum size of gradient
+	max_seq_length: the maximum length of the input sequence
+	learning_rate: the learning rate to use in param adjustment
+	lr_decay:rate at which to decayse learning rate
+	forward_only: whether to run backward pass or not
+	'''
+	def __init__(self, vocab_size, hidden_size, dropout,
+	num_layers, max_gradient_norm, max_seq_length,
+	learning_rate, lr_decay,batch_size, forward_only=False):
+		self.num_classes =3
+		self.dropout = dropout
+		self.vocab_size = vocab_size
+		#self.pair_size = len(getBatchPair())
+		self.learning_rate = tf.Variable(float(learning_rate), trainable=False)
+		self.learning_rate_decay_op = self.learning_rate.assign(
+		self.learning_rate * lr_decay)
+		initializer = tf.random_uniform_initializer(-1,1)
+		self.batch_pointer = 0
+		self.seq_input = []
+		self.seq_lengths = []
+		self.pairs = []
+		self.hidden_size = hidden_size
 
-def index_list(blog,flag):
-	list_of_lists = []
-	list_of_ylabels = []
-	list_of_pairs = []
-	for x in blog:#blog_ids:
-	#x = blog_ids[0]	
-		lists = []
-		pairlist = []
-		ylabel = []
-		with open(os.path.join("/home/anusha/Desktop/6740 Project/CURRENT/parsed_indices/",x+".cmp.txt.conll8.parsed_indices.txt"),'r') as f1:
-			seq_length = 0
-			if flag==0:
-				lists.append(15959)
-			for line in f1:
-				if line[0]!='\n':
-					lists.append(int(line.strip()))
-					seq_length += 1
-		list_of_lists.append([lists,seq_length])
+		self.batch_size = batch_size		
+		self.projection_dim = hidden_size
+		self.dropout = dropout
+		self.max_gradient_norm = max_gradient_norm
+		self.global_step = tf.Variable(0, trainable=False)
+		self.max_seq_length = max_seq_length
 
-		
-		# with open(os.path.join("/home/anusha/Desktop/6740 Project/CURRENT/pairs_y/",x+"_pairlist.txt"),'r') as f2:
-		# 	#print f2
-		# 	for line in f2.readlines():
-		# 		#print line
-		# 		ylabel.append(line[:-1])
-		# list_of_ylabels.append(ylabel)
-		# f2.close()
+		#seq_input: list of tensors, each tensor is size max_seq_length
+		#target: a list of values betweeen 0 and 1 indicating target scores
+		#seq_lengths:the early stop lengths of each input tensor
+		self.str_summary_type = tf.placeholder(tf.string,name="str_summary_type")
+		self.seq_input = tf.placeholder(tf.int32, shape=[None, max_seq_length],
+		name="input")
+		self.target = tf.placeholder(tf.int32, name="target", shape=[None,self.num_classes])
+		self.pairs = tf.placeholder(tf.int32 , shape = [None,2,2], name="pairs")
+		self.seq_lengths = tf.placeholder(tf.int32, shape=[None],
+		name="early_stop")
 
-		
-		with open(os.path.join("/home/anusha/Desktop/6740 Project/CURRENT/pairs/",x+"_pairlist.txt"),'r') as f3:
-			for line in f3.readlines():
-				#print line
-				if line[0]!='\n':
-					pairs = line.split()					
-					#print pairs
-					if pairs[0]=='None':
-						a = 0
-					else:
-						a = int(pairs[0])
-					if pairs[1]=='None':
-						b = 0
-					else:
-						b = int(pairs[1])
-					if pairs[2]=='None':
-						c = 0
-					else:
-						c = int(pairs[2])
-					if pairs[3]=='None':
-						d = 0
-					else:
-						d = int(pairs[3])
-					pairlist.append([ [a,b] , [c,d] ])
-					
-					temp = pairs[4:]
-					result = [1,0,0]
-					if len(temp)>1 :
-						e = temp[1]
-						if 'neg' in e:
-							result = [0,0,1]	#2
-						if 'pos' in e:
-							result = [0,1,0]	#1
-					else:
-						result = [1,0,0]
-					ylabel.append(result)
-		list_of_pairs.append(pairlist)
-		list_of_ylabels.append(ylabel)
-		#f3.close()
+		self.dropout_keep_prob_embedding = tf.placeholder(tf.float32,
+														  name="dropout_keep_prob_embedding")
+		self.dropout_keep_prob_lstm_input = tf.placeholder(tf.float32,
+														   name="dropout_keep_prob_lstm_input")
+		self.dropout_keep_prob_lstm_output = tf.placeholder(tf.float32,
+															name="dropout_keep_prob_lstm_output")
 
-	return list_of_lists,list_of_pairs,list_of_ylabels
+		with tf.variable_scope("embedding"), tf.device("/cpu:0"):
+			W = tf.get_variable(
+				"W",
+				[self.vocab_size, hidden_size],
+				initializer=tf.random_uniform_initializer(-1.0, 1.0))
+			embedded_tokens = tf.nn.embedding_lookup(W, self.seq_input)
+			embedded_tokens_drop = tf.nn.dropout(embedded_tokens, self.dropout_keep_prob_embedding)
 
+		#rnn_input = [embedded_tokens_drop[:, i,:] for i in range(self.max_seq_length)]
+		rnn_input = embedded_tokens_drop[:, :self.max_seq_length, :]
+		#print rnn_input
+		with tf.variable_scope("lstm") as scope:
+			single_cell = tf.contrib.rnn.core_rnn_cell.DropoutWrapper(
+				tf.contrib.rnn.core_rnn_cell.LSTMCell(hidden_size,
+								  initializer=tf.random_uniform_initializer(-1.0, 1.0),
+								  state_is_tuple=True),
+								  input_keep_prob=self.dropout_keep_prob_lstm_input,
+								  output_keep_prob=self.dropout_keep_prob_lstm_output)
+			cell = tf.contrib.rnn.core_rnn_cell.MultiRNNCell([single_cell] * num_layers, state_is_tuple=True)
 
-flags = tf.app.flags
-FLAGS = flags.FLAGS
-flags.DEFINE_string("config_file", "config.ini", "Path to configuration file with hyper-parameters.")
-flags.DEFINE_string("data_dir", "data/", "Path to main data directory.")
-flags.DEFINE_string("checkpoint_dir", "data/checkpoints/", "Directory to store/restore checkpoints")
+			initial_state = cell.zero_state(self.batch_size, tf.float32)
 
-def main():
-	hyper_params = check_get_hyper_param_dic()
-	util.dataprocessor.run(hyper_params["max_seq_length"],
-		hyper_params["max_vocab_size"])
+			rnn_output, rnn_state = rnn.dynamic_rnn(cell, rnn_input,sequence_length=self.seq_lengths,initial_state=initial_state)
 
-	#create model
-	# print "Creating model with..."
-	# print "Number of hidden layers: {0}".format(hyper_params["num_layers"])
-	# print "Number of units per layer: {0}".format(hyper_params["hidden_size"])
-	# print "Dropout: {0}".format(hyper_params["dropout"])
+			print rnn_output
+			print rnn_state
 
-	train_x,train_y_pairs,train_y_labels = index_list(blog_train,0)
-	test_x,test_y_pairs,test_y_labels = index_list(blog_test,1)
-	print train_x
-	print "*****"
-	print train_y_pairs
-	print "*****"
-	print train_y_labels
+		#for each pair compute the representation, tanh(W1[]+W2[]+b)
+		#SCOPE ???
+			W1 = tf.get_variable("W1",[self.hidden_size,2*self.hidden_size],initializer=tf.random_uniform_initializer(-1.0,1.0))
+			W2 = tf.get_variable("W2",[self.hidden_size,2*self.hidden_size],initializer=tf.random_uniform_initializer(-1.0,1.0))
+			b1 = tf.get_variable("b1", [self.num_classes], initializer=tf.constant_initializer(0.1))
+			b2 = tf.get_variable("b2", [self.num_classes], initializer=tf.constant_initializer(0.1))
+			pair_rep = tf.zeros([array_ops.shape(nest.flatten(self.pairs)[0])[0], self.hidden_size, 1] , tf.float32)
+			#pair_rep = tf.get_variable("pair_rep", [self.pairs.shape[0], self.hidden_size, 1], initializer = tf.zeros([self.pairs.shape[0], self.hidden_size, 1] , tf.float32) )
+			i = 0
+			#r = tf.while_loop(while_condition, body, [i])
+			for pair in tf.unpack(self.pairs):
+				#pair[0] is (a,b) and pair[1] is c,d
+				# a = pair[0][0]
+				# b = pair[0][1]
+				# c = pair[1][0]
+				# d = pair[1][1]
+				term1 = tf.concat([ rnn_state[pair[0][0]][0],rnn_state[pair[0][1]][0] ],0)
+				term2 = tf.concat([ rnn_state[pair[1][0]][0],rnn_state[pair[1][1]][0] ],0)
 
-	train_data = (train_x , train_y_pairs , train_y_labels)
-	test_data = (test_x, test_y_pairs, test_y_labels)
-	#test _ data ???
-	
-	
+				product_term1 = tf.nn.xw_plus_b(term1, W1, b1)
+				product_term2 = tf.nn.xw_plus_b(term2, W2, b2)
 
+				pair_rep[i] = (tf.tanh(product_term1 + product_term2))
+				i = i+1
+			print self.pairs
+			#print array_ops.shape(nest.flatten(self.pairs)[0])[0]
+			#print rnn_output[:, (self.pairs[:, 0, 1])]
+			#print rnn_output[:, self.pairs[:,0,1]]
+
+			#pair_rep = tf.tanh(tf.nn.xw_plus_b(tf.concat([rnn_output[:, self.pairs[:, 0, 0]], rnn_output[:, self.pairs[:, 0, 1]]], 1), W1, b1) 
+			#	+ tf.nn.xw_plus_b(tf.concat([rnn_output[:, self.pairs[:, 1, 0]], rnn_output[self.pairs[:, 1, 1]]], 1), W2, b2))
+
+		#representation is a matrix of dim M*50*1
 
 
+		with tf.variable_scope("output_projection"):
+			W = tf.get_variable(
+				"W",
+				[hidden_size, self.num_classes],
+				initializer=tf.truncated_normal_initializer(stddev=0.1))
+			b = tf.get_variable(
+				"b",
+				[self.num_classes],
+				initializer=tf.constant_initializer(0.1))
+			#we use the cell memory state for information on sentence embedding
+			#instead of rnn_state/ representation--over all pairs
+			self.scores = [ tf.nn.xw_plus_b(tf.transpose(pair), W, b)	for pair in pair_rep ]		#pair_rep is [M,50,1] and W is [50,3]
+			#softmax along a axis---
+			self.y = tf.nn.softmax(self.scores)
+			#argmax along some axis
+			self.predictions = tf.argmax(self.scores, 1)
 
-	vocabmapping = util.vocabmapping.VocabMapping()
-	vocab_size = vocabmapping.getSize()
-	#pair_size = ???
-	print "Vocab size is: {0}".format(vocab_size)
-	num_batches = 1
-	# path = os.path.join(FLAGS.data_dir, "processed/")
-	# infile = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
-	# #randomize data order
-	# print infile
-	# data = np.load(os.path.join(path, infile[0]))
-	# for i in range(1, len(infile)):
-	# 	data = np.vstack((data, np.load(os.path.join(path, infile[i]))))
-	# np.random.shuffle(data)
-	# #data = data[:3000]
-	# num_batches = len(data) / hyper_params["batch_size"]
-	# # 70/30 splir for train/test
-	# train_start_end_index = [0, int(hyper_params["train_frac"] * len(data))]
-	# test_start_end_index = [int(hyper_params["train_frac"] * len(data)) + 1, len(data) - 1]
-	# print "Number of training examples per batch: {0}, \
-	# \nNumber of batches per epoch: {1}".format(hyper_params["batch_size"],num_batches)
-	with tf.Session() as sess:
-		writer = tf.train.SummaryWriter("/tmp/tb_logs", sess.graph)
-		model = create_model(sess, hyper_params, vocab_size)
-	# #train model and save to checkpoint
-	# 	print "Beggining training..."
-	# 	print "Maximum number of epochs to train for: {0}".format(hyper_params["max_epoch"])
-	# 	print "Batch size: {0}".format(hyper_params["batch_size"])
-	# 	print "Starting learning rate: {0}".format(hyper_params["learning_rate"])
-	# 	print "Learning rate decay factor: {0}".format(hyper_params["lr_decay_factor"])
+		with tf.variable_scope("loss"):
+			#losses --- check if it works for 3 dimensions
+			self.losses = tf.nn.softmax_cross_entropy_with_logits(logits = self.scores, labels = self.target, name="ce_losses")
+			self.total_loss = tf.reduce_sum(self.losses)
+			self.mean_loss = tf.reduce_mean(self.losses)
 
-		step_time, loss = 0.0, 0.0
-		previous_losses = []
-		tot_steps = num_batches * hyper_params["max_epoch"]
-		model.initData(train_data, test_data)
+		with tf.variable_scope("accuracy"):
+			self.correct_predictions = tf.equal(self.predictions, tf.argmax(self.target, 1))
+			self.accuracy = tf.reduce_mean(tf.cast(self.correct_predictions, "float"), name="accuracy")
+
+		params = tf.trainable_variables()
+		if not forward_only:
+			with tf.name_scope("train") as scope:
+				opt = tf.train.AdamOptimizer(self.learning_rate)
+			gradients = tf.gradients(self.losses, params)
+			clipped_gradients, norm = tf.clip_by_global_norm(gradients, self.max_gradient_norm)
+			with tf.name_scope("grad_norms") as scope:
+				grad_summ = tf.summary.scalar("grad_norms", norm)
+			self.update = opt.apply_gradients(zip(clipped_gradients, params), global_step=self.global_step)
+			loss_summ = tf.summary.scalar("{0}_loss".format(self.str_summary_type), self.mean_loss)
+			acc_summ = tf.summary.scalar("{0}_accuracy".format(self.str_summary_type), self.accuracy)
+			self.merged = tf.summary.merge([loss_summ, acc_summ])
+		self.saver = tf.train.Saver(tf.all_variables())
+
+	# def getBatchPair(self, test_data=False):
+	# 	if not test_data:
+	# 		batch_pairs = self.train_data[1][self.train_batch_pointer]
+	# 		return batch_pairs
+	# 	else:
+	# 		batch_pairs = self.test_data[1][self.test_batch_pointer]
+	# 		return batch_pairs
 
 
+	def getBatch(self, test_data=False):
+		'''
+		Get a random batch of data to preprocess for a step
+		not sure how efficient this is...
 
+		Input:
+		data: shuffled batchxnxm numpy array of data
+		train_data: flag indicating whether or not to increment batch pointer, in other
+			word whether to return the next training batch, or cross val data
 
-	# 	#starting at step 1 to prevent test set from running after first batch
-		for step in xrange(1, tot_steps):
-			# Get a batch and make a step.
-			start_time = time.time()
+		Returns:
+		A numpy arrays for inputs, target, and seq_lengths
 
-			inputs, pairs, targets, seq_lengths = model.getBatch()
-			str_summary, step_loss, _ = model.step(sess, inputs, pairs, targets, seq_lengths, False)
-
-			step_time += (time.time() - start_time) / hyper_params["steps_per_checkpoint"]
-			loss += step_loss / hyper_params["steps_per_checkpoint"]
-
-			# Once in a while, we save checkpoint, print statistics, and run evals.
-			if step % hyper_params["steps_per_checkpoint"] == 0:
-				writer.add_summary(str_summary, step)
-				# Print statistics for the previous epoch.
-				# print ("global step %d learning rate %.7f step-time %.2f loss %.4f"
-				# % (model.global_step.eval(), model.learning_rate.eval(),
-				# step_time, loss))
-				# Decrease learning rate if no improvement was seen over last 3 times.
-				if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
-					sess.run(model.learning_rate_decay_op)
-				previous_losses.append(loss)
-				# Save checkpoint and zero timer and loss.
-				step_time, loss, test_accuracy = 0.0, 0.0, 0.0
-				# Run evals on test set and print their accuracy.
-				#print "Running test set"
-				for test_step in xrange(len(model.test_data)):
-					inputs, targets, seq_lengths = model.getBatch(True)
-					str_summary, test_loss, _, accuracy = model.step(sess, inputs, pairs, targets, seq_lengths, True)
-					loss += test_loss
-					test_accuracy += accuracy
-				normalized_test_loss, normalized_test_accuracy = loss / len(model.test_data), test_accuracy / len(model.test_data)
-				checkpoint_path = os.path.join(FLAGS.checkpoint_dir, "sentiment{0}.ckpt".format(normalized_test_accuracy))
-				model.saver.save(sess, checkpoint_path, global_step=model.global_step)
-				writer.add_summary(str_summary, step)
-				#print "Avg Test Loss: {0}, Avg Test Accuracy: {1}".format(normalized_test_loss, normalized_test_accuracy)
-				#print "-------Step {0}/{1}------".format(step,tot_steps)
-				loss = 0.0
-				sys.stdout.flush()
-
-def create_model(session, hyper_params, vocab_size):
-	model = models.sentiment.SentimentModel(vocab_size = vocab_size,pair_size=0,
-											hidden_size = hyper_params["hidden_size"],
-											dropout = hyper_params["dropout"],
-											num_layers = hyper_params["num_layers"],
-											max_gradient_norm = hyper_params["grad_clip"],
-											max_seq_length = hyper_params["max_seq_length"],
-											learning_rate = hyper_params["learning_rate"],
-											lr_decay = hyper_params["lr_decay_factor"],
-											batch_size = hyper_params["batch_size"])
-# 	ckpt = tf.train.get_checkpoint_state(FLAGS.checkpoint_dir)
-# 	if ckpt and gfile.Exists(ckpt.model_checkpoint_path):
-# 		print "Reading model parameters from {0}".format(ckpt.model_checkpoint_path)
-# 		model.saver.restore(session, ckpt.model_checkpoint_path)
-# 	else:
-# 		print "Created model with fresh parameters."
-# 		session.run(tf.initialize_all_variables())
-	return model
-
-def read_config_file():
-	config = ConfigParser.ConfigParser()
-	config.read(FLAGS.config_file)
-	dic = {}
-	sentiment_section = "sentiment_network_params"
-	general_section = "general"
-	dic["num_layers"] = config.getint(sentiment_section, "num_layers")
-	dic["hidden_size"] = config.getint(sentiment_section, "hidden_size")
-	dic["dropout"] = config.getfloat(sentiment_section, "dropout")
-	dic["batch_size"] = config.getint(sentiment_section, "batch_size")
-	dic["train_frac"] = config.getfloat(sentiment_section, "train_frac")
-	dic["learning_rate"] = config.getfloat(sentiment_section, "learning_rate")
-	dic["lr_decay_factor"] = config.getfloat(sentiment_section, "lr_decay_factor")
-	dic["grad_clip"] = config.getint(sentiment_section, "grad_clip")
-	dic["use_config_file_if_checkpoint_exists"] = config.getboolean(general_section,
-		"use_config_file_if_checkpoint_exists")
-	dic["max_epoch"] = config.getint(sentiment_section, "max_epoch")
-	dic ["max_vocab_size"] = config.getint(sentiment_section, "max_vocab_size")
-	dic["max_seq_length"] = config.getint(general_section,
-		"max_seq_length")
-	dic["steps_per_checkpoint"] = config.getint(general_section,
-		"steps_per_checkpoint")
-	return dic
-
-def check_get_hyper_param_dic():
-	if not os.path.exists(FLAGS.checkpoint_dir):
-		os.makedirs(FLAGS.checkpoint_dir)
-	serializer = hyperparams.HyperParameterHandler(FLAGS.checkpoint_dir)
-	hyper_params = read_config_file()
-	if serializer.checkExists():
-		if serializer.checkChanged(hyper_params):
-			if not hyper_params["use_config_file_if_checkpoint_exists"]:
-				hyper_params = serializer.getParams()
-				print "Restoring hyper params from previous checkpoint"
-			else:
-				new_checkpoint_dir = "{0}_hidden_size_{1}_numlayers_{2}_dropout_{3}".format(
-				int(time.time()),
-				hyper_params["hidden_size"],
-				hyper_params["num_layers"],
-				hyper_params["dropout"])
-				new_checkpoint_dir = os.path.join(FLAGS.checkpoint_dir,
-					new_checkpoint_dir)
-				os.makedirs(new_checkpoint_dir)
-				FLAGS.checkpoint_dir = new_checkpoint_dir
- 				serializer = hyperparams.HyperParameterHandler(FLAGS.checkpoint_dir)
-				serializer.saveParams(hyper_params)
+		'''
+		#batch_inputs = []
+		if not test_data:
+			batch_inputs = self.train_data[self.train_batch_pointer]#.transpose()
+			#for i in range(self.max_seq_length):
+			#	batch_inputs.append(temp[i])
+			targets = self.train_targets[self.train_batch_pointer]
+			seq_lengths = self.train_sequence_lengths[self.train_batch_pointer]
+			self.train_batch_pointer = self.train_batch_pointer % len(self.train_data)
+			pairs = self.train_data[1][self.train_batch_pointer]
+			self.train_batch_pointer += 1
+			return batch_inputs, pairs, targets, seq_lengths
 		else:
-			print "No hyper parameter changed detected"
-	else:
-		serializer.saveParams(hyper_params)
-		print "No hyper params detected at checkpoint"
-	return hyper_params
+			batch_inputs = self.test_data[self.test_batch_pointer]#.transpose()
+			#for i in range(self.max_seq_length):
+			#	batch_inputs.append(temp[i])
+			targets = self.test_targets[self.test_batch_pointer]
+			seq_lengths = self.test_sequence_lengths[self.test_batch_pointer]
+			pairs = self.test_data[1][self.test_batch_pointer]
+			self.test_batch_pointer += 1
+			self.test_batch_pointer = self.test_batch_pointer % len(self.test_data)
+			return batch_inputs, pairs, targets, seq_lengths
 
-if __name__ == '__main__':
-	main()
+	def initData(self, train_data, test_data):
+		self.train_batch_pointer = 0
+		self.test_batch_pointer = 0
+		#cutoff non even number of batches
+		# targets = (data.transpose()[-2]).transpose()			#???
+		# sequence_lengths = (data.transpose()[-1]).transpose()		#???
+		# data = (data.transpose()[0:-2]).transpose()				#???
+		# onehot = np.zeros((len(targets), 2))
+		# onehot[np.arange(len(targets)), targets] = 1
+		
+
+		#data is (x,pairs,labels)
+
+		self.train_data = train_data[0][0]
+		self.test_data = test_data[0][0]				#???	
+
+		self.train_num_batch = len(self.train_data) / self.batch_size
+		self.test_num_batch = len(self.test_data) / self.batch_size
+
+		num_train_batches = len(self.train_data) / self.batch_size
+		num_test_batches = len(self.test_data) / self.batch_size
+		#train_cutoff = len(self.train_data) - (len(self.train_data) % self.batch_size)
+		#test_cutoff = len(self.test_data) - (len(self.test_data) % self.batch_size)
+		# self.train_data = self.train_data[:train_cutoff]
+		# self.test_data = self.test_data[:test_cutoff]
+
+		self.train_sequence_lengths = train_data[0][1]
+		self.test_sequence_lengths = test_data[0][1]
+		#self.train_sequence_lengths = np.split(self.train_sequence_lengths, num_train_batches)
+		self.train_targets = train_data[2]
+		self.test_targets = test_data[2]
+
+		self.train_pairs = train_data[1]
+		self.test_pairs = test_data[1]
+		#self.train_targets = np.split(self.train_targets, num_train_batches)
+		#self.train_data = np.split(self.train_data, num_train_batches)
+
+		# print "Test size is: {0}, splitting into {1} batches".format(len(self.test_data), num_test_batches)
+		# self.test_data = np.split(self.test_data, num_test_batches)
+		# self.test_targets = onehot[test_start_end_index[0]:test_start_end_index[1]][:test_cutoff]
+		# self.test_targets = np.split(self.test_targets, num_test_batches)
+		# self.test_sequence_lengths = sequence_lengths[test_start_end_index[0]:test_start_end_index[1]][:test_cutoff]
+		# self.test_sequence_lengths = np.split(self.test_sequence_lengths, num_test_batches)
+
+	def step(self, session, inputs, pairs, targets, seq_lengths, forward_only=False):
+		'''
+		Inputs:
+		session: tensorflow session
+		inputs: list of list of ints representing tokens in review of batch_size
+		output: list of sentiment scores
+		seq_lengths: list of sequence lengths, provided at runtime to prevent need for padding
+
+		Returns:
+		merged_tb_vars, loss, none
+		or (in forward only):
+		merged_tb_vars, loss, outputs
+		'''
+		input_feed = {}
+		#for i in xrange(self.max_seq_length):
+		input_feed[self.seq_input.name] = inputs
+		input_feed[self.pairs.name] = pairs
+		input_feed[self.target.name] = targets
+		input_feed[self.seq_lengths.name] = seq_lengths
+		input_feed[self.dropout_keep_prob_embedding.name] = self.dropout
+		input_feed[self.dropout_keep_prob_lstm_input.name] = self.dropout
+		input_feed[self.dropout_keep_prob_lstm_output.name] = self.dropout
+
+		if not forward_only:
+			input_feed[self.str_summary_type.name] = "train"
+			output_feed = [self.merged, self.mean_loss, self.update]
+		else:
+			input_feed[self.str_summary_type.name] = "test"
+			output_feed = [self.merged, self.mean_loss, self.y, self.accuracy]
+		outputs = session.run(output_feed, input_feed)
+		if not forward_only:
+			return outputs[0], outputs[1], None
+		else:
+			return outputs[0], outputs[1], outputs[2], outputs[3]
