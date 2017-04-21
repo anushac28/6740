@@ -44,8 +44,7 @@ class SentimentModel(object):
 	'''
 
 	def __init__(self, vocab_size, hidden_size, dropout,
-	num_layers, max_gradient_norm, max_seq_length,
-	learning_rate, lr_decay,batch_size, session,forward_only=False):
+	num_layers, max_gradient_norm, learning_rate, lr_decay,batch_size, session,forward_only=False):
 		self.num_classes =3
 		self.dropout = dropout
 		self.vocab_size = vocab_size
@@ -66,18 +65,16 @@ class SentimentModel(object):
 		self.dropout = dropout
 		self.max_gradient_norm = max_gradient_norm
 		self.global_step = tf.Variable(0, trainable=False)
-		self.max_seq_length = max_seq_length
+		self.max_seq_length = tf.placeholder(tf.int32, shape=[None], name="max")
 
 		#seq_input: list of tensors, each tensor is size max_seq_length
 		#target: a list of values betweeen 0 and 1 indicating target scores
 		#seq_lengths:the early stop lengths of each input tensor
 		self.str_summary_type = tf.placeholder(tf.string,name="str_summary_type")
-		self.seq_input = tf.placeholder(tf.int32, shape=[None, max_seq_length],
-		name="input")
+		self.seq_input = tf.placeholder(tf.int32, shape=[None, None], name="input")
 		self.target = tf.placeholder(tf.int32, name="target", shape=[None,self.num_classes])
 		self.pairs = tf.placeholder(tf.int32 , shape = [None,2,2], name="pairs")
-		self.seq_lengths = tf.placeholder(tf.int32, shape=[None],
-		name="early_stop")
+		self.seq_lengths = tf.placeholder(tf.int32, shape=[None], name="early_stop")
 
 		self.dropout_keep_prob_embedding = tf.placeholder(tf.float32,
 														  name="dropout_keep_prob_embedding")
@@ -121,7 +118,7 @@ class SentimentModel(object):
 			b1 = tf.get_variable("b1", [self.num_classes], initializer=tf.constant_initializer(0.1))
 			b2 = tf.get_variable("b2", [self.num_classes], initializer=tf.constant_initializer(0.1))
 
-			pair_rep = tf.zeros([array_ops.shape(nest.flatten(self.pairs)[0])[0], self.hidden_size, 1] , tf.float32)
+			pair_rep = tf.zeros([array_ops.shape(nest.flatten(self.pairs)[0])[0], 1, self.hidden_size] , tf.float32)
 			#pair_rep = tf.get_variable("pair_rep", [array_ops.shape(nest.flatten(self.pairs)[0])[0], self.hidden_size, 1])
 			#print pair_rep
 			#print "~~~~~~~~~~~~~~~~"
@@ -183,7 +180,7 @@ class SentimentModel(object):
 		with tf.variable_scope("output_projection"):
 			W = tf.get_variable(
 				"W",
-				[hidden_size, self.num_classes],
+				[self.hidden_size,self.num_classes],
 				initializer=tf.truncated_normal_initializer(stddev=0.1))
 			b = tf.get_variable(
 				"b",
@@ -192,8 +189,21 @@ class SentimentModel(object):
 			#we use the cell memory state for information on sentence embedding
 			#instead of rnn_state/ representation--over all pairs
 			#self.scores = [ tf.nn.xw_plus_b(tf.transpose(pair), W, b)	for pair in pair_rep ]		#pair_rep is [M,50,1] and W is [50,3]
-			exit()
-			self.scores = tf.nn.xw_plus_b(W, tf.transpose(pair_rep),  b)		#pair_rep is [M,50,1] and W is [50,3]
+			
+			#exit()
+
+
+			#self.scores = tf.nn.xw_plus_b(W, tf.transpose(pair_rep),  b) 
+
+			#X = tf.placeholder(tf.float32, shape=(None, None, None, 100))
+			#W = tf.Variable(tf.truncated_normal([100, 50], stddev=0.1))
+			X_ = tf.reshape(pair_rep, [-1, self.hidden_size])
+			self.scores = tf.nn.xw_plus_b(X_, W, b)
+			# X_shape = tf.gather(tf.shape(pair_rep), [0,1]) # Extract the first three dimensions
+			# target_shape = tf.concat(0, [X_shape, [self.num_classes]])
+			# self.scores = tf.reshape(Y_, target_shape)
+
+			#self.scores = tf.nn.xw_plus_b(W, tf.transpose(pair_rep),  b)		#pair_rep is [M,50,1] and W is [50,3]
 			#self.scores = tf_assign
 			#print "~~~"+str(self.scores)
 			#softmax along a axis---
@@ -260,6 +270,7 @@ class SentimentModel(object):
 			targets = self.train_targets[self.train_batch_pointer]
 			#print self.train_sequence_lengths
 			seq_lengths = self.train_sequence_lengths[self.train_batch_pointer]
+			max_seq_length = self.train_sequence_lengths[self.train_batch_pointer]
 			self.train_batch_pointer = self.train_batch_pointer % len(self.train_data)
 			pairs = self.train_pairs[self.train_batch_pointer]
 			#print len(batch_inputs)
@@ -275,6 +286,7 @@ class SentimentModel(object):
 			#	batch_inputs.append(temp[i])
 			targets = self.test_targets[self.test_batch_pointer]
 			seq_lengths = self.test_sequence_lengths[self.test_batch_pointer]
+			max_seq_length = self.test_sequence_lengths[self.test_batch_pointer]
 			pairs = self.test_pairs[self.test_batch_pointer]
 			self.test_batch_pointer += 1
 			self.test_batch_pointer = self.test_batch_pointer % len(self.test_data)
@@ -313,6 +325,7 @@ class SentimentModel(object):
 		# print train_data[0][:][1]
 		# print self.train_sequence_lengths
 		# exit()
+		self.max_seq_length = train_data[1]
 
 		self.train_pairs = train_data[2]
 		self.test_pairs = test_data[2]
