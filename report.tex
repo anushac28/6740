@@ -1,0 +1,132 @@
+%
+% File acl2016.tex
+%
+%% Based on the style files for ACL-2015, with some improvements
+%%  taken from the NAACL-2016 style
+%% Based on the style files for ACL-2014, which were, in turn,
+%% Based on the style files for ACL-2013, which were, in turn,
+%% Based on the style files for ACL-2012, which were, in turn,
+%% based on the style files for ACL-2011, which were, in turn, 
+%% based on the style files for ACL-2010, which were, in turn, 
+%% based on the style files for ACL-IJCNLP-2009, which were, in turn,
+%% based on the style files for EACL-2009 and IJCNLP-2008...
+
+%% Based on the style files for EACL 2006 by 
+%%e.agirre@ehu.es or Sergi.Balari@uab.es
+%% and that of ACL 08 by Joakim Nivre and Noah Smith
+
+\documentclass[11pt]{article}
+\usepackage{acl2016}
+\usepackage{times}
+\usepackage{url}
+\usepackage{latexsym}
+
+\aclfinalcopy % Uncomment this line for the final submission
+%\def\aclpaperid{***} %  Enter the acl Paper ID here
+
+%\setlength\titlebox{5cm}
+% You can expand the titlebox if you need extra space
+% to show all the authors. Please do not make the titlebox
+% smaller than 5cm (the original size); we will check this
+% in the camera-ready version and ask you to change it back.
+
+\newcommand\BibTeX{B{\sc ib}\TeX}
+
+\title{INFO 6300 Project : Sentiment and Belief detection using LSTMs}
+
+\author{First Author \\
+  Anusha Chowdhury \\
+  MS, Computer Science \\
+  {\tt ac2633@cornell.edu} 
+  %\\\And
+  %Second Author \\
+  %Affiliation / Address line 1 \\
+  %Affiliation / Address line 2 \\
+  %Affiliation / Address line 3 \\
+  %{\tt email@domain} \\}
+}
+\date{May 1, 2017}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+In this project, we try to solve the BeSt Evaluation task 2016, and the goal is to use  
+Long Short Term Memory networks(LSTMs) for sentiment and belief detection given pairs of words
+from a document. In particular we look at the sentiment polarity, that is whether it is none,
+positive or negative sentiment. We use tensorflow 1.0.0 for implementation of the model
+and then evaluate the model using the standard precision, recall and F1 scores.
+\end{abstract}
+
+\section{Introduction}
+The goal of this project is to solve the BeSt Evaluation task from TAC(Text Analysis Conference 2016).
+\subsection{Task definition} 
+The 2016 BeSt Evaluation is an evaluation of sentiment and belief detection with source and target, 
+where sources are named entities and targets are named entities or events or relations.
+The evaluation is interested in sources, attitudes, and targets like which entity has what mental attitude towards
+another entity. The source is an entity of type Person, Geo­Political Entity (GPE), or Organization.  The
+target can be any relation, or any event.  In addition, for sentiment only, the target can
+also be any entity. 
+The evaluation includes belief and sentiment. We will look at the subproblem that given a pair of words, one has 
+to predict whether the polarity is positive, negative or none for sentiment. Once we experiment with the model for this
+and achieve a good accuracy, we can extend the model to belief as well in a similar manner.
+\subsection{The Dataset} 
+The documents consist of blog posts, newswires and quotes(labelled as dfweird in the attached folder).
+Gold entities, relations, and events (EREs) and predicted EREs are provided in the dataset.
+\section{Background and Related Work}
+LSTM-RNNs  (Hochreiter  and  Schmidhuber, 1997)  have  been  applied  to  many  
+sequential   modeling   and   prediction   tasks,   such as  machine  translation  
+(Bahdanau  et  al.,  2014),    speech   recognition (Graves  et  al.,  2013) and  
+named entity recognition (Hammerton,  2003).
+To achieve fine-grained   opinion   extraction, researchers have focused on extracting subjective 
+phrases using a CRF-based approach from open-domain  text  such  as  news  articles(Yang and Cardie, 2012). 
+In existing literature, LSTMs have been used for joint extraction of opinion entities 
+and relations(Arzoo and Claire, 2016).
+
+\section{Experiments}
+\subsection{Tensorflow as a beginner : MNIST dataset}
+TensorFlow is a powerful library for doing large-scale numerical computation. 
+One of the tasks at which it excels is implementing and training deep neural networks.
+Being a beginner in neural networks and their implementations in tensorflow, I decided to first do an
+experiment on a subset of the MNIST digit classification dataset(attached).
+
+We referred to the deep MNIST website (MNIST,16) for the tensorflow implementations in python and then decided to make 
+changes to the input and output as required. So we chose a subset of the MNIST dataset consisting of 4000 images, each
+of which has 784 features(28X28 pixels) for training the model and then tested it on a test dataset of 800 images.
+We used Tensorflow because it gives fast implementations of neural networks. We built a multilayer convolutional 
+neural network to train and test on this data. We use weights(W) and biases(b) 
+to suit the shapes of these tensors, that is in accordance with the image sizes(784 is to match the input 
+feature vector) and 10 is the number of categories(digits can be 0 to 9). We used argmax method of tensorflow to find the 
+index which had the highest value of probability(hence being the most probable digit) after doing softmax. 
+We also used dropout to prevent overfitting the model. 
+We experimented with 20000, 30000 and 40000 iteration sizes(please refer to the attached code for details) and 
+batch sizes of 50, 70, 100 and 110. Out of these, the one with 30000 iteration size and batch size of 70 gave around 
+98.5$\%$ accuracy. With 40000 iteration size and 110 batch size I got 99.25$\%$ accuracy.
+So from this I learnt implementations of neural networks in tensorflow, the fact that batch size and epochs matter
+as parameters and that there is a sweet spot after which error may increase due to overfitting.
+
+
+\section{The Model}
+\subsection{Hyperparameters}
+The different hyperparameters that we had to specify for this model were 
+maximum epoch, batch size, hidden size, number of layers, learning rate, training fraction, dropout, maximum sequence length 
+and steps per checkpoint(please refer to config.ini in the code folder).
+Among these we kept the hidden size always as 50, number of layers as 2, learning rate as 0.01, batch size as 1,
+steps per checkpoint as 50 and maximum sequence length as 5000. 
+For the rest of the parameters we experimented with different values. Actually we should be 
+experimenting with each of these parameters, but as we have too many, due to time constraints we decided to 
+restrict ourselves to a few of them.
+
+
+\section*{Acknowledgements}
+I would like to thank my advisor Professor Claire Cardie for guiding me throughout this project.
+Without her help, this project would not have been possible. I would also like to thank her for 
+all the advising office hours, which were very helpful to ensure whether I was on the right track.
+I would like to give special thanks to Arzoo Katiyar for helping me with the tensorflow implementations, coding and
+improving the model. Also her existing work(Arzoo and Claire,2016) was extremely helpful since it was very much
+related with this project. I had regular meetings with her and that helped me a lot to progress fast.
+I would also like to thank Vlad and Esin for helping me with collection of the dataset and related materials.
+
+%\bibliography{acl2016}
+%\bibliographystyle{acl2016}
+
+\end{document}
