@@ -22,11 +22,14 @@ import util.hyperparams as hyperparams
 import models.sentiment
 import util.vocabmapping
 import file_ids
-from file_ids import blog_ids, newswire_ids, df_weird_ids
+from file_ids import *
+from file_ids2 import * 
 import numpy as np 
 
-blog_train = ['0a421343005f3241376fa01e1cb3c6fb','0ba982819aaf9f5b94a7cebd48ac6018','0c49bb860962aa0d5b8e3fc277592da0','0cfdfe102b7a4cb34e1a181c1d36d23d']
-blog_test = ['1b268b27094ba9c5feb11192dad940ab','1d16a571f14fb1032bc19e9314a46deb']
+blog_t = ret_train_fnames()
+blog_test = ret_test_fnames()
+#blog_t = ['0a421343005f3241376fa01e1cb3c6fb','0ba982819aaf9f5b94a7cebd48ac6018','0c49bb860962aa0d5b8e3fc277592da0','0cfdfe102b7a4cb34e1a181c1d36d23d']
+#blog_test = ['1b268b27094ba9c5feb11192dad940ab','1d16a571f14fb1032bc19e9314a46deb']
 
 def index_list(blog,flag):
 	list_of_lists = []
@@ -38,17 +41,21 @@ def index_list(blog,flag):
 		lists = []
 		pairlist = []
 		ylabel = []
-		with open(os.path.join("/home/anusha/Desktop/6740 Project/CURRENT/parsed_indices/",x+".cmp.txt.conll8.parsed_indices.txt"),'r') as f1:
-			seq_length = 0
-			if flag==0:
-				lists.append(15959)
-			for line in f1:
-				if line[0]!='\n':
-					lists.append(int(line.strip()))
-					seq_length += 1
-		#lists = np.expand_dims(lists, axis=0)
-		list_of_lists.append(lists)
-		seqs.append([seq_length])
+		try:
+			with open(os.path.join("/home/anusha/Desktop/CURRENT/parsed_indices/",x+".cmp.txt.conll8.parsed_indices.txt"),'r') as f1:
+				seq_length = 0
+				if flag==0:
+					lists.append(1)
+					lists.append(0)
+				for line in f1:
+					if line[0]!='\n':
+						lists.append(int(line.strip()))
+						seq_length += 1
+			#lists = np.expand_dims(lists, axis=0)
+			list_of_lists.append(lists)
+			seqs.append([seq_length])
+		except:
+			continue
 
 		
 		# with open(os.path.join("/home/anusha/Desktop/6740 Project/CURRENT/pairs_y/",x+"_pairlist.txt"),'r') as f2:
@@ -60,43 +67,46 @@ def index_list(blog,flag):
 		# f2.close()
 
 		
-		with open(os.path.join("/home/anusha/Desktop/6740 Project/CURRENT/pairs/",x+"_pairlist.txt"),'r') as f3:
-			for line in f3.readlines():
-				#print line
-				if line[0]!='\n':
-					pairs = line.split()					
-					#print pairs
-					if pairs[0]=='None':
-						a = 0
-					else:
-						a = int(pairs[0])
-					if pairs[1]=='None':
-						b = 0
-					else:
-						b = int(pairs[1])
-					if pairs[2]=='None':
-						c = 0
-					else:
-						c = int(pairs[2])
-					if pairs[3]=='None':
-						d = 0
-					else:
-						d = int(pairs[3])
-					pairlist.append([ [a,b] , [c,d] ])
-					
-					temp = pairs[4:]
-					result = [1,0,0]
-					if len(temp)>1 :
-						e = temp[1]
-						if 'neg' in e:
-							result = [0,0,1]	#2
-						if 'pos' in e:
-							result = [0,1,0]	#1
-					else:
+		try:
+			with open(os.path.join("/home/anusha/Desktop/CURRENT/pairs/",x+"_pairlist.txt"),'r') as f3:
+				for line in f3.readlines():
+					#print line
+					if line[0]!='\n':
+						pairs = line.split()					
+						#print pairs
+						if pairs[0]=='None':
+							a = 0
+						else:
+							a = int(pairs[0])
+						if pairs[1]=='None':
+							b = 0
+						else:
+							b = int(pairs[1])
+						if pairs[2]=='None':
+							c = 0
+						else:
+							c = int(pairs[2])
+						if pairs[3]=='None':
+							d = 0
+						else:
+							d = int(pairs[3])
+						pairlist.append([ [a,b] , [c,d] ])
+						
+						temp = pairs[4:]
 						result = [1,0,0]
-					ylabel.append(result)
-		list_of_pairs.append(pairlist)
-		list_of_ylabels.append(ylabel)
+						if len(temp)>1 :
+							e = temp[1]
+							if 'neg' in e:
+								result = [0,0,1]	#2
+							if 'pos' in e:
+								result = [0,1,0]	#1
+						else:
+							result = [1,0,0]
+						ylabel.append(result)
+			list_of_pairs.append(pairlist)
+			list_of_ylabels.append(ylabel)
+		except:
+			continue
 		#f3.close()
 
 	return list_of_lists,seqs,list_of_pairs,list_of_ylabels
@@ -118,7 +128,7 @@ def main():
 	# print "Number of units per layer: {0}".format(hyper_params["hidden_size"])
 	# print "Dropout: {0}".format(hyper_params["dropout"])
 
-	train_x,train_seq,train_y_pairs,train_y_labels = index_list(blog_train,0)
+	train_x,train_seq,train_y_pairs,train_y_labels = index_list(blog_t,0)
 	test_x,test_seq,test_y_pairs,test_y_labels = index_list(blog_test,1)
 	# print train_x
 	# print "*****"
@@ -140,7 +150,7 @@ def main():
 	vocabmapping = util.vocabmapping.VocabMapping()
 	vocab_size = vocabmapping.getSize()
 	#pair_size = ???
-	print "Vocab size is: {0}".format(vocab_size)
+	#print "Vocab size is: {0}".format(vocab_size)
 	num_batches = 1
 	# path = os.path.join(FLAGS.data_dir, "processed/")
 	# infile = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
@@ -186,6 +196,8 @@ def main():
 
 			step_time += (time.time() - start_time) / hyper_params["steps_per_checkpoint"]
 			loss += step_loss / hyper_params["steps_per_checkpoint"]
+			#print "loss is ",
+			#print (step_loss / hyper_params["steps_per_checkpoint"])
 
 			# Once in a while, we save checkpoint, print statistics, and run evals.
 			if step % hyper_params["steps_per_checkpoint"] == 0:
@@ -202,12 +214,34 @@ def main():
 				step_time, loss, test_accuracy = 0.0, 0.0, 0.0
 				# Run evals on test set and print their accuracy.
 				#print "Running test set"
-				for test_step in xrange(len(model.test_data)):
-					inputs, targets, seq_lengths = model.getBatch(True)
+				print "test data length"
+				print len(test_data)
+				for test_step in xrange(5):
+					inputs, pairs, targets, seq_lengths = model.getBatch(False)
+					#print targets
+					i = 0
+					for t in targets:
+						#print pairs[i]
+						print t
+						i = i+1
 					str_summary, test_loss, _, accuracy = model.step(sess, inputs, pairs, targets, seq_lengths, True)
+					# print "details"
+					# print test_step
+					# print _
+					# print tf.argmax(_,1)
+					# for x in _:
+					# 	if x[0]>x[1] and x[0]>x[2]:
+					# 		print "0"
+					# 	if x[1]>x[0] and x[1]>x[2]:
+					# 		print "1"
+					# 	if x[2]>x[1] and x[2]>x[0]:
+					# 		print "2"
 					loss += test_loss
 					test_accuracy += accuracy
-				normalized_test_loss, normalized_test_accuracy = loss / len(model.test_data), test_accuracy / len(model.test_data)
+					#print "accuracy is "
+					#print accuracy
+				exit()
+				normalized_test_loss, normalized_test_accuracy = loss / len(blog_test), test_accuracy / len(test_data)
 				checkpoint_path = os.path.join(FLAGS.checkpoint_dir, "sentiment{0}.ckpt".format(normalized_test_accuracy))
 				model.saver.save(sess, checkpoint_path, global_step=model.global_step)
 				writer.add_summary(str_summary, step)
@@ -222,7 +256,6 @@ def create_model(session, hyper_params, vocab_size):
 											dropout = hyper_params["dropout"],
 											num_layers = hyper_params["num_layers"],
 											max_gradient_norm = hyper_params["grad_clip"],
-											max_seq_length = hyper_params["max_seq_length"],
 											learning_rate = hyper_params["learning_rate"],
 											lr_decay = hyper_params["lr_decay_factor"],
 											batch_size = hyper_params["batch_size"],session=session)
@@ -290,3 +323,16 @@ def check_get_hyper_param_dic():
 
 if __name__ == '__main__':
 	main()
+
+# ****
+# 97
+# [[ 0.15581135  0.19333872  0.65084994]
+#  [ 0.31233302  0.26671427  0.42095268]
+#  [ 0.24155505  0.24156073  0.51688427]
+#  ..., 
+#  [ 0.21081246  0.53051299  0.25867456]
+#  [ 0.3341853   0.3687433   0.29707137]
+#  [ 0.45486385  0.29041544  0.25472078]]
+# accuracy is 
+# 0.368432
+
