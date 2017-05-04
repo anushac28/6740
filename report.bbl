@@ -1,0 +1,47 @@
+\begin{thebibliography}{}
+
+\bibitem[\protect\citename{Arzoo}2016]{Arzoo:16}
+Investigating LSTMs for Joint Extraction of Opinion Entities and Relations
+\newblock 2016.
+\newblock Arzoo Katiyar and Claire Cardie.
+\newblock \texttt{https://www.aclweb.org/anthology/P/P16/P16-1087.pdf}
+
+
+\bibitem[\protect\citename{Hochreiter}1997]{Hochreiter} 
+Long Short-Term Memory
+\newblock 1997.
+\newblock Hochreiter  and  Schmidhuber.
+
+\bibitem[\protect\citename{Bahdanau}2014]{Bahdanau} 
+Neural Machine Translation by Jointly Learning to Align and Translate
+\newblock 2014.
+\newblock Bahdanau, Cho and Bengio.
+
+\bibitem[\protect\citename{Graves}2013]{Graves} 
+Speech Recognition with Deep Recurrent Neural Networks
+\newblock 2013.
+\newblock Graves, Mohamed and Hinton.
+
+\bibitem[\protect\citename{Hammerton}2003]{Hammerton} 
+Named entity recognition with long short-term memory
+\newblock 2003.
+\newblock James Hammerton.
+
+\bibitem[\protect\citename{Yang}2012]{Yang} 
+Extracting opinion  expressions  with  semi-markov  conditional random  fields.
+\newblock 2012.
+\newblock Bishan Yang  and  Claire  Cardie.
+
+\bibitem[\protect\citename{DeepMNIST}2016]{MNIST:16} 
+Deep MNIST for experts.
+\newblock 2016.
+\newblock \texttt{https://www.tensorflow.org/get\_started/mnist/pros}
+
+
+\bibitem[\protect\citename{LSTM}2016]{LSTM:16} 
+The LSTM blog.
+\newblock 2016.
+\newblock \texttt{http://colah.github.io/posts/2015-08-Understanding-LSTMs/}
+
+
+\end{thebibliography}
