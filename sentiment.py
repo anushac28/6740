@@ -55,6 +55,8 @@ class SentimentModel(object):
 		self.learning_rate * lr_decay)
 		initializer = tf.random_uniform_initializer(-1,1)
 		self.batch_pointer = 0
+		self.train_batch_pointer = 0
+		self.test_batch_pointer = 0
 		#self.seq_input = []
 		#self.seq_lengths = []
 		#self.pairs = []
@@ -113,12 +115,12 @@ class SentimentModel(object):
 			#for each pair compute the representation, tanh(W1[]+W2[]+b)
 			#SCOPE ???
 
-			W1 = tf.get_variable("W1",[2*self.hidden_size,self.num_classes],initializer=tf.random_uniform_initializer(-1.0,1.0))
-			W2 = tf.get_variable("W2",[2*self.hidden_size,self.num_classes],initializer=tf.random_uniform_initializer(-1.0,1.0))
-			b1 = tf.get_variable("b1", [self.num_classes], initializer=tf.constant_initializer(0.1))
-			b2 = tf.get_variable("b2", [self.num_classes], initializer=tf.constant_initializer(0.1))
+			W1 = tf.get_variable("W1",[2*self.hidden_size,self.hidden_size],initializer=tf.random_uniform_initializer(-1.0,1.0))
+			W2 = tf.get_variable("W2",[2*self.hidden_size,self.hidden_size],initializer=tf.random_uniform_initializer(-1.0,1.0))
+			b1 = tf.get_variable("b1", [self.hidden_size], initializer=tf.constant_initializer(0.1))
+			b2 = tf.get_variable("b2", [self.hidden_size], initializer=tf.constant_initializer(0.1))
 
-			pair_rep = tf.zeros([array_ops.shape(nest.flatten(self.pairs)[0])[0], 1, self.hidden_size] , tf.float32)
+			pair_rep = tf.zeros([array_ops.shape(nest.flatten(self.pairs)[0])[0], self.hidden_size] , tf.float32)
 			#pair_rep = tf.get_variable("pair_rep", [array_ops.shape(nest.flatten(self.pairs)[0])[0], self.hidden_size, 1])
 			#print pair_rep
 			#print "~~~~~~~~~~~~~~~~"
@@ -172,6 +174,8 @@ class SentimentModel(object):
 			b_list = self.pairs[: , 0, 1]
 			c_list = self.pairs[: , 1, 0]
 			d_list = self.pairs[: , 1, 1]
+			print "*********************"
+			print tf.nn.embedding_lookup(rnn_output[0], a_list)
 			term1 = tf.matmul( tf.concat([ tf.nn.embedding_lookup(rnn_output[0], a_list), tf.nn.embedding_lookup(rnn_output[0], b_list) ],1) , W1) + b1
 			term2 = tf.matmul( tf.concat([ tf.nn.embedding_lookup(rnn_output[0], c_list), tf.nn.embedding_lookup(rnn_output[0], d_list) ],1) , W2) + b2
 			pair_rep = tf.tanh(term1+term2)
@@ -197,13 +201,15 @@ class SentimentModel(object):
 
 			#X = tf.placeholder(tf.float32, shape=(None, None, None, 100))
 			#W = tf.Variable(tf.truncated_normal([100, 50], stddev=0.1))
-			X_ = tf.reshape(pair_rep, [-1, self.hidden_size])
-			self.scores = tf.nn.xw_plus_b(X_, W, b)
+			print "*******************"
+			print pair_rep.get_shape()
+			# X_ = tf.reshape(pair_rep, [-1, self.hidden_size])
+			# self.scores = tf.nn.xw_plus_b(X_, W, b)
 			# X_shape = tf.gather(tf.shape(pair_rep), [0,1]) # Extract the first three dimensions
 			# target_shape = tf.concat(0, [X_shape, [self.num_classes]])
 			# self.scores = tf.reshape(Y_, target_shape)
 
-			#self.scores = tf.nn.xw_plus_b(W, tf.transpose(pair_rep),  b)		#pair_rep is [M,50,1] and W is [50,3]
+			self.scores = tf.nn.xw_plus_b(pair_rep, W, b)		#pair_rep is [M,50,1] and W is [50,3]
 			#self.scores = tf_assign
 			#print "~~~"+str(self.scores)
 			#softmax along a axis---
@@ -212,8 +218,9 @@ class SentimentModel(object):
 			self.predictions = tf.argmax(self.scores, 1)
 
 			#print tf.trainable_variables()
+			print "predictions"
 
-			#print self.predictions
+			print self.predictions
 
 		with tf.variable_scope("loss"):
 			#losses --- check if it works for 3 dimensions
@@ -264,6 +271,8 @@ class SentimentModel(object):
 		'''
 		#batch_inputs = []
 		if not test_data:
+			print "****"
+			print self.train_batch_pointer
 			batch_inputs = np.expand_dims(self.train_data[self.train_batch_pointer], axis=0)   #self.train_data[self.train_batch_pointer]	#.transpose()
 			#for i in range(self.max_seq_length):
 			#	batch_inputs.append(temp[i])
@@ -271,17 +280,17 @@ class SentimentModel(object):
 			#print self.train_sequence_lengths
 			seq_lengths = self.train_sequence_lengths[self.train_batch_pointer]
 			max_seq_length = self.train_sequence_lengths[self.train_batch_pointer]
-			self.train_batch_pointer = self.train_batch_pointer % len(self.train_data)
+			#self.train_batch_pointer = self.train_batch_pointer % len(self.train_data)
 			pairs = self.train_pairs[self.train_batch_pointer]
 			#print len(batch_inputs)
-			self.train_batch_pointer += 1
+			self.train_batch_pointer = (1+self.train_batch_pointer) % len(self.train_data)
 
 			#print seq_lengths
 			#print batch_inputs
 
 			return batch_inputs, pairs, targets, seq_lengths
 		else:
-			batch_inputs = np.expand_dims(self.train_data[self.train_batch_pointer], axis=0)  #.transpose()
+			batch_inputs = np.expand_dims(self.test_data[self.test_batch_pointer], axis=0)  #.transpose()
 			#for i in range(self.max_seq_length):
 			#	batch_inputs.append(temp[i])
 			targets = self.test_targets[self.test_batch_pointer]
