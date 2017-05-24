@@ -1,24 +1,29 @@
 Code :
-data : entire data
-parsed : Vlad's files
+data : entire data, has all the documents from BeSt
 parsed_output : cumulative counts
 parsed_mapping : given sent_id,token_id, returns token number
 parsed_indices : index for the token in that doc, which comes from the big vocab.txt dictionary
-vocabulary : python script.py >vocabulary.txt
 script.py : Index,tokens, all mappings
+parsed : has the outputs from running Stanford Parser 
+loaders.py : generates parsed(for syntax of this talk to Vlad for help)
+file_ids.py : has all the file ids, split into train and test (has functions to extract accordingly)
+pairs_version1.py : creates all possible combinations of pairs
+util : has vocabmapping.py for dictionary reading/dumping done with pickle
+models : contains sentiment.py which is the main LSTM model
+train.py : gets batches of train and test and calls model.step on them(session run)
+config.ini : has hyperparameters for the model
+wordtovec.py : gives the word2vec embeddings
+prec.py : used to calculate precision, recall and F1 scores
 
-config.ini : made batch size as 1
-train.py
+
+
+TO RUN:
+Create directories named parsed_indices, parsed_mapping and parsed_output
+Run python script.py
+Execute script.py
+Download tensorflow 1.0.0
+Create a directory named pairs and Run python pairs_version1.py
+Then run python train.py
 
 
 
-Note :
-TODO 1 -
-'010aaf594ae6ef20eb28e3ee26038375'
-If we look at source file we see 2 authors : randman and patrick1000
-They are both present in ere
-But none of them have come in the conll8_parsed/json and hence not in pairs, so we have to add a separate script to add them
-
-TODO 2 -
-Make vocab.txt only from the first 173 files and make some of the words with frequency 1 as UNK
-For 73 test files, we find the index from the trained vocab.txt else use index of UNK
